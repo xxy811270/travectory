@@ -5,6 +5,8 @@ import { Layers3, LocateFixed, MapPin, Navigation, Plus, Route as RouteIcon, Sea
 import { searchAmapPois } from "../lib/amap-browser";
 import type { AmapPoiResult, Day, Edge, Poi, RoutePath } from "../types";
 import { EdgeEditor } from "./MobileEdgeManager";
+import { Capacitor } from "@capacitor/core";
+import { Geolocation } from "@capacitor/geolocation";
 
 const AMAP_KEY = process.env.NEXT_PUBLIC_AMAP_JS_KEY || "";
 const AMAP_SECRET = process.env.NEXT_PUBLIC_AMAP_SECRET || "";
@@ -185,10 +187,7 @@ export function MobileMap({ days, pois, edges, userId, projectId, onAddPoi, onDa
     return () => map.off("click", handleMapClick);
   }, [ready, pickingPoi, onAddPoi]);
 
-  const locate = () => {
-    if (!navigator.geolocation || !mapRef.current || !window.AMap) { setError("当前浏览器不支持定位"); return; }
-    setLocating(true);
-    navigator.geolocation.getCurrentPosition((position) => {
+  const showLocation = (position: { coords: { longitude: number; latitude: number } }) => {
       const point = [position.coords.longitude, position.coords.latitude];
       locationMarkerRef.current?.setMap?.(null);
       locationMarkerRef.current = new window.AMap.Marker({
@@ -200,7 +199,26 @@ export function MobileMap({ days, pois, edges, userId, projectId, onAddPoi, onDa
       locationMarkerRef.current.setMap(mapRef.current);
       mapRef.current.setZoomAndCenter(14, point);
       setLocating(false);
-    }, () => { setError("无法获取位置，请允许浏览器使用定位权限"); setLocating(false); }, { enableHighAccuracy: true, timeout: 10000 });
+  };
+  const locate = async () => {
+    if (!mapRef.current || !window.AMap) { setError("地图尚未准备完成"); return; }
+    setLocating(true); setError("");
+    try {
+      if (Capacitor.isNativePlatform()) {
+        let permission = await Geolocation.checkPermissions();
+        if (permission.location !== "granted" && permission.coarseLocation !== "granted") permission = await Geolocation.requestPermissions({ permissions: ["location", "coarseLocation"] });
+        if (permission.location !== "granted" && permission.coarseLocation !== "granted") throw new Error("定位权限被拒绝，请在系统设置中允许 Travectory 使用位置信息");
+        showLocation(await Geolocation.getCurrentPosition({ enableHighAccuracy: permission.location === "granted", timeout: 20000, maximumAge: 10000 }));
+      } else {
+        if (!navigator.geolocation) throw new Error("当前浏览器不支持定位");
+        const position = await new Promise<GeolocationPosition>((resolve,reject)=>navigator.geolocation.getCurrentPosition(resolve,reject,{enableHighAccuracy:true,timeout:15000,maximumAge:10000}));
+        showLocation(position);
+      }
+    } catch (reason) {
+      const message=reason instanceof Error?reason.message:"无法获取位置";
+      setError(message.includes("denied")||message.includes("拒绝")?"定位权限未开启，请在系统设置中允许 Travectory 使用位置信息":message.includes("disabled")||message.includes("关闭")?"手机定位服务未开启，请先打开系统定位":"定位失败，请确认 Travectory 定位权限和手机定位服务均已开启");
+      setLocating(false);
+    }
   };
 
   const searchOnMap = async () => {
@@ -249,7 +267,7 @@ export function MobileMap({ days, pois, edges, userId, projectId, onAddPoi, onDa
       </div>
       <div className="map-search-box"><Search size={17} /><input value={mapQuery} onChange={(event) => setMapQuery(event.target.value)} onKeyDown={(event) => event.key === "Enter" && void searchOnMap()} placeholder="搜索地点并添加 POI" /><button onClick={() => void searchOnMap()} disabled={searching}>{searching ? "..." : "搜索"}</button></div>
       {searchResults.length > 0 && <div className="map-search-results">{searchResults.slice(0, 8).map((result) => <button key={`${result.id}-${result.location}`} onClick={() => chooseSearchResult(result)}><MapPin size={16} /><span><b>{result.name}</b><small>{result.address || result.location}</small></span><Plus size={16} /></button>)}</div>}
-      <button className="locate-button" onClick={locate} aria-label="定位"><LocateFixed size={21} className={locating ? "spinning" : ""} /></button>
+      <button className="locate-button" onClick={() => void locate()} aria-label="定位"><LocateFixed size={21} className={locating ? "spinning" : ""} /></button>
       <button className={`map-add-button ${pickingPoi ? "active" : ""}`} onClick={() => setPickingPoi((value) => !value)} aria-label="地图选点新增 POI"><Plus size={22} /></button>
       <button className={`map-layer-button ${showLayers ? "active" : ""}`} onClick={() => setShowLayers((value) => !value)} aria-label="地图图层"><Layers3 size={20} /></button>
       <button className="map-edge-button" onClick={() => setShowEdgeEditor(true)} aria-label="新增路线边"><RouteIcon size={20} /><Plus size={11} /></button>

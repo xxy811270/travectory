@@ -9,6 +9,7 @@ import {
 import { loadMobileData, loadProjects } from "../lib/local-api";
 import { localProjectFiles } from "../lib/local-api";
 import { parseRoadbookFile, summarizeRoadbook, type RoadbookFile, type RoadbookSummary } from "../lib/roadbook-format";
+import { consumeNativeRoadbook, isNativeApp } from "../lib/native-roadbook";
 import type { Day, Edge, Poi, Project, ProjectListItem } from "../types";
 import { MobileMap } from "./MobileMap";
 import { MobilePoiManager } from "./MobilePoiManager";
@@ -85,11 +86,22 @@ export function MobileApp() {
     catch (reason) { setError(reason instanceof Error ? reason.message : "新建路书失败"); }
     finally { setLoading(false); }
   };
+  const previewImportText = (text: string, filename: string) => {
+    try { const parsed = parseRoadbookFile(JSON.parse(text)); setPendingImport({ file: parsed, summary: summarizeRoadbook(parsed), filename }); setError(""); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "路书文件无法读取"); }
+  };
   const chooseImport = async (file: File) => {
-    try { const parsed = parseRoadbookFile(JSON.parse(await file.text())); setPendingImport({ file: parsed, summary: summarizeRoadbook(parsed), filename: file.name }); }
+    try { previewImportText(await file.text(), file.name); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "路书文件无法读取"); }
     finally { if (importRef.current) importRef.current.value = ""; }
   };
+  useEffect(() => {
+    if (!isNativeApp()) return;
+    let active = true;
+    const poll = async () => { try { const incoming = await consumeNativeRoadbook(); if (active && incoming) previewImportText(incoming.text, incoming.filename); } catch { /* native bridge not ready yet */ } };
+    void poll(); const timer = window.setInterval(() => void poll(), 1200);
+    return () => { active = false; window.clearInterval(timer); };
+  }, []);
   const confirmImport = async () => {
     if (!pendingImport) return;
     setLoading(true);
