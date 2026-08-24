@@ -2,6 +2,14 @@
 
 import { useState } from "react";
 
+function hdrs() {
+  const u = localStorage.getItem("travectory_user");
+  const p = localStorage.getItem("travectory_project");
+  const uid = u ? JSON.parse(u).id || "default" : "default";
+  const pid = p ? JSON.parse(p).id || uid : uid;
+  return { "Content-Type": "application/json", "x-user-id": uid, "x-project-id": pid };
+}
+
 export function ShareButton() {
   const [open, setOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
@@ -9,7 +17,7 @@ export function ShareButton() {
 
   const handleCreateShare = async () => {
     setCreating(true);
-    const res = await fetch("/api/share", { method: "POST" });
+    const res = await fetch("/api/share", { method: "POST", headers: hdrs() });
     const link = await res.json();
     setShareUrl(`${window.location.origin}/share/${link.id}`);
     setCreating(false);
@@ -23,11 +31,7 @@ export function ShareButton() {
   const handleRevoke = async () => {
     if (!shareUrl) return;
     const id = shareUrl.split("/").pop();
-    await fetch("/api/share", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
+    await fetch("/api/share", { method: "DELETE", headers: hdrs(), body: JSON.stringify({ id }) });
     setShareUrl("");
   };
 

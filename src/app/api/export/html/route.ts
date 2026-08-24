@@ -1,16 +1,25 @@
 import { NextResponse } from "next/server";
 import { getAllPois, getAllEdges, getAllDays, getProjectMeta } from "@/lib/db";
 import { withUser } from "@/lib/db/route-utils";
+import { getCurrentProjectId, getCurrentUserId } from "@/lib/db/context";
+import { getProjectById } from "@/lib/db/auth";
 import { formatDistance, formatDuration } from "@/lib/geo";
 import type { POI, Edge, Day } from "@/types";
 import { TRANSPORT_LABELS, POI_TAG_COLORS } from "@/types";
 
-const DC = ["#ef4444","#f59e0b","#10b981","#3b82f6","#8b5cf6","#ec4899","#06b6d4","#84cc16","#f97316","#6366f1"];
-const AK = "845e62b164ef5f9f6cf9b26a98f3cd4a";
-const AS = "fcbdbb9b1e5d1409235e80f665996ba4";
+const DC = ["#ef4444","#f59e0b","#10b981","#8b5cf6","#ec4899","#f97316","#84cc16","#06b6d4","#dc2626","#a855f7","#14b8a6","#e11d48","#22c55e","#eab308","#d946ef","#0891b2","#7c3aed","#65a30d","#c2410c","#ca8a04"];
+const AK = process.env.NEXT_PUBLIC_AMAP_JS_KEY || "";
+const AS = process.env.NEXT_PUBLIC_AMAP_SECRET || "";
 
 function esc(s: string): string { return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 function js(v: unknown): string { return JSON.stringify(v).replace(/</g,"\\u003c"); }
+function exportFilename(name: string): string {
+  const dateStamp = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date()).replace(/-/g, "");
+  const safeName = name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_").replace(/[. ]+$/g, "").trim() || "路书";
+  return `${safeName}_${dateStamp}.html`;
+}
 
 function build(meta: { name: string; description: string }, pois: POI[], edges: Edge[], days: Day[]): string {
   const now = new Date().toLocaleDateString("zh-CN");
@@ -148,13 +157,19 @@ ${daysHtml}
 
 export const GET = withUser(async () => {
   try {
-    const meta = getProjectMeta();
+    const storedMeta = getProjectMeta();
+    const project = getProjectById(getCurrentProjectId(), getCurrentUserId());
+    const meta = {
+      ...storedMeta,
+      name: project?.name || storedMeta.name,
+      description: project?.description || storedMeta.description,
+    };
     const html = build(meta, getAllPois(), getAllEdges(), getAllDays());
-    const sn = encodeURIComponent(meta.name || "roadbook");
+    const filename = encodeURIComponent(exportFilename(meta.name));
     return new NextResponse(html, {
       headers: {
         "Content-Type": "text/html; charset=utf-8",
-        "Content-Disposition": `attachment; filename*=UTF-8''${sn}.html`,
+        "Content-Disposition": `attachment; filename*=UTF-8''${filename}`,
       },
     });
   } catch (err) {

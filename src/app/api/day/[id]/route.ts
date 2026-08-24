@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDayById, updateDayInDb, deleteDayFromDb } from "@/lib/db";
+import { getDayById, updateDayInDb, deleteDayFromDb, getAllPois, getAllEdges, getAllDays } from "@/lib/db";
 import { withUser } from "@/lib/db/route-utils";
+import { updateProjectStats } from "@/lib/db/auth";
+import { getCurrentProjectId } from "@/lib/db/context";
+
+function syncStats() {
+  const pid = getCurrentProjectId();
+  if (pid) updateProjectStats(pid, getAllPois().length, getAllEdges().length, getAllDays().length);
+}
 
 export const GET = withUser(async (_req: NextRequest, ctx: { params: Promise<{ id: string }> }) => {
   const { id } = await ctx.params;

@@ -1,15 +1,20 @@
 // ========== Amap Web API Client ==========
 
-const AMAP_WEB_KEY = "865cb93a62736536b5b1146de0328d0d";
-const AMAP_JS_KEY = "845e62b164ef5f9f6cf9b26a98f3cd4a";
-const AMAP_SECRET = "fcbdbb9b1e5d1409235e80f665996ba4";
+const AMAP_WEB_KEY = process.env.AMAP_WEB_KEY || "";
+const AMAP_JS_KEY = process.env.AMAP_JS_KEY || "";
+const AMAP_SECRET = process.env.AMAP_SECRET || "";
 
 export function getWebKey(): string {
+  if (!AMAP_WEB_KEY) throw new Error("Missing AMAP_WEB_KEY environment variable");
   return AMAP_WEB_KEY;
 }
 
 export function getJsKey(): string {
   return AMAP_JS_KEY;
+}
+
+export function getAmapSecret(): string {
+  return AMAP_SECRET;
 }
 
 export async function amapGet<T>(

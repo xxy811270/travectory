@@ -6,7 +6,7 @@ export const GET = withUser(async () => {
   try {
     const metadata = getProjectMeta();
     const project = {
-      version: "1.0", metadata,
+      format: "travectory-roadbook", formatVersion: 2, version: "2.0", metadata,
       pois: getAllPois(), edges: getAllEdges(), days: getAllDays(),
       shareId: null, exportedAt: new Date().toISOString(),
     };

@@ -7,12 +7,15 @@ import { Toolbar } from "@/components/toolbar/Toolbar";
 import { StatusBar } from "@/components/status-bar/StatusBar";
 import { useDataLoader } from "@/hooks/use-data-loader";
 import { LoginPage } from "@/components/auth/LoginPage";
+import { Dashboard } from "@/components/auth/Dashboard";
 import { ResizablePanel } from "@/components/layout/ResizablePanel";
 import { useAuthStore } from "@/stores/auth-store";
+import { useProjectStore } from "@/stores/project-store";
 import { Toaster } from "sonner";
 
 export default function Home() {
   const { user, checked } = useAuthStore();
+  const { currentProject } = useProjectStore();
 
   if (!checked) {
     return (
@@ -22,9 +25,8 @@ export default function Home() {
     );
   }
 
-  if (!user) {
-    return <LoginPage />;
-  }
+  if (!user) return <LoginPage />;
+  if (!currentProject) return <Dashboard />;
 
   return <AppMain />;
 }
@@ -37,15 +39,10 @@ function AppMain() {
       <Toaster position="bottom-right" />
       <Toolbar />
       <div className="flex-1 relative overflow-hidden">
-        {/* Map fills entire content area — always fixed */}
         <MapContainer />
-
-        {/* Left panel overlays on top of map */}
         <ResizablePanel defaultWidth={280} minWidth={200} maxWidth={500} side="left">
           <LeftPanel />
         </ResizablePanel>
-
-        {/* Right panel overlays on top of map */}
         <ResizablePanel defaultWidth={340} minWidth={240} maxWidth={600} side="right">
           <RightPanel />
         </ResizablePanel>

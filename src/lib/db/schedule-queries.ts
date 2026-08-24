@@ -68,6 +68,48 @@ export function insertDay(day: Day): void {
   );
 }
 
+function applyDayOrder(db: ReturnType<typeof getDb>, dayIds: string[]): void {
+  const setNumber = db.prepare("UPDATE days SET day_number = ?, updated_at = datetime('now') WHERE id = ?");
+  // Move every row into a collision-free temporary range before assigning
+  // positive numbers because (project_id, day_number) is unique.
+  dayIds.forEach((id, index) => setNumber.run(-1000000 - index, id));
+  dayIds.forEach((id, index) => setNumber.run(index + 1, id));
+}
+
+export function insertDayAtPosition(day: Day, requestedPosition: number): Day {
+  const db = getDb();
+  const insert = db.transaction(() => {
+    const existingIds = (db.prepare("SELECT id FROM days ORDER BY day_number").all() as Array<{ id: string }>).map((row) => row.id);
+    const position = Math.max(1, Math.min(existingIds.length + 1, Math.trunc(requestedPosition)));
+    day.dayNumber = -2000000;
+    insertDay(day);
+    existingIds.splice(position - 1, 0, day.id);
+    applyDayOrder(db, existingIds);
+  });
+  insert();
+  const created = getDayById(day.id);
+  if (!created) throw new Error("新日程创建失败");
+  return created;
+}
+
+export function reorderDaysInDb(dayIds: string[]): Day[] {
+  const db = getDb();
+  const reorder = db.transaction(() => {
+    const existingIds = (db.prepare("SELECT id FROM days").all() as Array<{ id: string }>).map((row) => row.id);
+    const existing = new Set(existingIds);
+    if (
+      existingIds.length !== dayIds.length ||
+      new Set(dayIds).size !== dayIds.length ||
+      dayIds.some((id) => !existing.has(id))
+    ) {
+      throw new Error("日程天数已发生变化，请刷新后重试");
+    }
+    applyDayOrder(db, dayIds);
+  });
+  reorder();
+  return getAllDays();
+}
+
 export function updateDayInDb(id: string, updates: Partial<Day>): void {
   const db = getDb();
   const fields: string[] = [];
@@ -89,7 +131,12 @@ export function updateDayInDb(id: string, updates: Partial<Day>): void {
 
 export function deleteDayFromDb(id: string): void {
   const db = getDb();
-  db.prepare("DELETE FROM days WHERE id = ?").run(id);
+  const remove = db.transaction(() => {
+    db.prepare("DELETE FROM days WHERE id = ?").run(id);
+    const remainingIds = (db.prepare("SELECT id FROM days ORDER BY day_number").all() as Array<{ id: string }>).map((row) => row.id);
+    applyDayOrder(db, remainingIds);
+  });
+  remove();
 }
 
 export function insertScheduleItem(item: ScheduleItem): void {
@@ -130,8 +177,151 @@ export function deleteScheduleItemFromDb(id: string): void {
   db.prepare("DELETE FROM schedule_items WHERE id = ?").run(id);
 }
 
+function applyScheduleItemOrder(
+  db: ReturnType<typeof getDb>,
+  dayId: string,
+  itemIds: string[]
+): void {
+  const rows = db.prepare(
+    `SELECT id, poi_id, from_edge_id
+     FROM schedule_items
+     WHERE day_id = ?`
+  ).all(dayId) as Array<{ id: string; poi_id: string; from_edge_id: string | null }>;
+
+  const existingIds = new Set(rows.map((row) => row.id));
+  if (
+    rows.length !== itemIds.length ||
+    new Set(itemIds).size !== itemIds.length ||
+    itemIds.some((id) => !existingIds.has(id))
+  ) {
+    throw new Error("日程项已发生变化，请刷新后重试");
+  }
+
+  const rowById = new Map(rows.map((row) => [row.id, row]));
+  const edges = db.prepare(
+    `SELECT id, origin_id, destination_id
+     FROM edges
+     ORDER BY created_at DESC`
+  ).all() as Array<{ id: string; origin_id: string; destination_id: string }>;
+  const edgeById = new Map(edges.map((edge) => [edge.id, edge]));
+
+  const connects = (
+    edge: { origin_id: string; destination_id: string },
+    fromPoiId: string,
+    toPoiId: string
+  ) => (
+    (edge.origin_id === fromPoiId && edge.destination_id === toPoiId) ||
+    (edge.origin_id === toPoiId && edge.destination_id === fromPoiId)
+  );
+
+  const updateItem = db.prepare(
+    `UPDATE schedule_items
+     SET item_order = ?, from_edge_id = ?, updated_at = datetime('now')
+     WHERE id = ? AND day_id = ?`
+  );
+
+  itemIds.forEach((id, index) => {
+    let fromEdgeId: string | null = null;
+    if (index > 0) {
+      const previous = rowById.get(itemIds[index - 1]);
+      const current = rowById.get(id);
+      if (!previous || !current) throw new Error("日程项不存在");
+
+      const preferred = rows
+        .map((row) => row.from_edge_id ? edgeById.get(row.from_edge_id) : undefined)
+        .find((edge) => edge && connects(edge, previous.poi_id, current.poi_id));
+      const matching = preferred || edges.find((edge) =>
+        connects(edge, previous.poi_id, current.poi_id)
+      );
+      fromEdgeId = matching?.id || null;
+    }
+
+    updateItem.run(index, fromEdgeId, id, dayId);
+  });
+}
+
+/** Insert a schedule item at a zero-based position and repair adjacent routes atomically. */
+export function insertScheduleItemAtPosition(item: ScheduleItem, requestedIndex: number): Day {
+  const db = getDb();
+  const insert = db.transaction(() => {
+    const existingIds = (db.prepare(
+      "SELECT id FROM schedule_items WHERE day_id = ? ORDER BY item_order, created_at"
+    ).all(item.dayId) as Array<{ id: string }>).map((row) => row.id);
+    const index = Math.max(0, Math.min(existingIds.length, Math.trunc(requestedIndex)));
+    item.order = existingIds.length;
+    insertScheduleItem(item);
+    existingIds.splice(index, 0, item.id);
+    applyScheduleItemOrder(db, item.dayId, existingIds);
+  });
+  insert();
+  const day = getDayById(item.dayId);
+  if (!day) throw new Error("日程不存在");
+  return day;
+}
+
+/**
+ * Persist a complete ordering for one day and repair every route reference so
+ * that `from_edge_id` always describes the immediately preceding POI.
+ * Existing edges are only referenced here; they are never modified or deleted.
+ */
+export function reorderScheduleItemsInDb(dayId: string, itemIds: string[]): Day {
+  const db = getDb();
+  const reorder = db.transaction(() => applyScheduleItemOrder(db, dayId, itemIds));
+
+  reorder();
+  const day = getDayById(dayId);
+  if (!day) throw new Error("日程不存在");
+  return day;
+}
+
 export function clearAllSchedule(): void {
   const db = getDb();
   db.prepare("DELETE FROM schedule_items").run();
   db.prepare("DELETE FROM days").run();
+}
+
+/**
+ * Reverse the itinerary across all day slots without changing the schema or
+ * deleting/recreating any persisted day or schedule item.
+ *
+ * Day metadata (date, label and notes) stays attached to its original day
+ * slot. Only the itinerary items move. `from_edge_id` belongs to the leg that
+ * precedes an item, so it has to be shifted as each day's item order reverses.
+ */
+export function reverseItineraryInDb(): Day[] {
+  const db = getDb();
+
+  const reverse = db.transaction(() => {
+    const days = getAllDays();
+    if (days.length === 0) return;
+
+    const sourceItemsByDay = [...days]
+      .sort((a, b) => a.dayNumber - b.dayNumber)
+      .map((day) => [...day.items].sort((a, b) => a.order - b.order));
+
+    const updateItem = db.prepare(
+      `UPDATE schedule_items
+       SET day_id = ?, item_order = ?, from_edge_id = ?, updated_at = datetime('now')
+       WHERE id = ?`
+    );
+
+    for (let targetIndex = 0; targetIndex < days.length; targetIndex += 1) {
+      const targetDay = days[targetIndex];
+      const sourceItems = sourceItemsByDay[days.length - 1 - targetIndex];
+      const reversedItems = [...sourceItems].reverse();
+
+      reversedItems.forEach((item, itemIndex) => {
+        // In A→B→C, B stores AB and C stores BC. After reversing, B must
+        // store BC and A must store AB, hence the edge comes from the item
+        // immediately before it in the reversed array.
+        const fromEdgeId = itemIndex === 0
+          ? null
+          : reversedItems[itemIndex - 1].fromEdgeId;
+        updateItem.run(targetDay.id, itemIndex, fromEdgeId, item.id);
+      });
+    }
+  });
+
+  reverse();
+  return getAllDays();
 }

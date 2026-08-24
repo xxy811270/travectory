@@ -41,7 +41,7 @@ export function LeftPanel() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
-        {tab === "pois" ? <POIList /> : <EdgeList />}
+        {tab === "pois" ? <POIList key="poi-list" /> : <EdgeList key="edge-list" />}
       </div>
 
       {/* Bottom actions */}
@@ -49,13 +49,13 @@ export function LeftPanel() {
         {tab === "pois" && (
           <>
             <button
-              className="flex-1 py-1.5 text-xs bg-primary text-white rounded hover:bg-primary-dark"
+              className="flex-1 py-2.5 text-sm bg-primary text-white rounded hover:bg-primary-dark"
               onClick={() => setShowAddPoi(true)}
             >
               + 添加 POI
             </button>
             <button
-              className="px-3 py-1.5 text-xs border border-border rounded hover:bg-gray-50"
+              className="flex-1 py-2.5 text-sm border border-border rounded hover:bg-gray-50"
               onClick={() => setShowSearch(true)}
             >
               搜索

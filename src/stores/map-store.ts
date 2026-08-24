@@ -15,9 +15,10 @@ interface MapStore {
 }
 
 const DAY_COLORS = [
-  "#ef4444", "#f59e0b", "#10b981", "#3b82f6",
-  "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16",
-  "#f97316", "#6366f1",
+  "#ef4444", "#f59e0b", "#10b981", "#8b5cf6", "#ec4899",
+  "#f97316", "#84cc16", "#06b6d4", "#dc2626", "#a855f7",
+  "#14b8a6", "#e11d48", "#22c55e", "#eab308", "#d946ef",
+  "#0891b2", "#7c3aed", "#65a30d", "#c2410c", "#ca8a04",
 ];
 
 export const useMapStore = create<MapStore>((set) => ({

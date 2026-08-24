@@ -1,19 +1,21 @@
 // ========== API Client for Client Components ==========
 
-function getStoredUserId(): string {
+function getUserId(): string {
   if (typeof window === "undefined") return "default";
-  try {
-    const stored = localStorage.getItem("travectory_user");
-    if (stored) return JSON.parse(stored).id || "default";
-  } catch { /* ignore */ }
-  return "default";
+  try { const v = localStorage.getItem("travectory_user"); return v ? JSON.parse(v).id || "default" : "default"; } catch { return "default"; }
+}
+
+function getProjectId(): string {
+  if (typeof window === "undefined") return getUserId();
+  try { const v = localStorage.getItem("travectory_project"); return v ? JSON.parse(v).id || getUserId() : getUserId(); } catch { return getUserId(); }
 }
 
 async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     headers: {
       "Content-Type": "application/json",
-      "x-user-id": getStoredUserId(),
+      "x-user-id": getUserId(),
+      "x-project-id": getProjectId(),
     },
     ...options,
   });
@@ -70,6 +72,12 @@ export const dayApi = {
     apiFetch<import("@/types").Day>(`/api/day/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   delete: (id: string) =>
     apiFetch<{ success: boolean }>(`/api/day/${id}`, { method: "DELETE" }),
+  reverse: () =>
+    apiFetch<import("@/types").Day[]>("/api/day/reverse", { method: "POST" }),
+  reorder: (dayIds: string[]) =>
+    apiFetch<import("@/types").Day[]>("/api/day/reorder", {
+      method: "POST", body: JSON.stringify({ dayIds }),
+    }),
 };
 
 // Schedule
@@ -80,6 +88,16 @@ export const scheduleApi = {
     apiFetch<{ success: boolean }>(`/api/schedule/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   delete: (id: string) =>
     apiFetch<{ success: boolean }>(`/api/schedule/${id}`, { method: "DELETE" }),
+  reorder: (dayId: string, itemIds: string[]) =>
+    apiFetch<import("@/types").Day>("/api/schedule/reorder", {
+      method: "POST",
+      body: JSON.stringify({ dayId, itemIds }),
+    }),
+  insertAt: (data: Record<string, unknown>) =>
+    apiFetch<import("@/types").Day>("/api/schedule/insert", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };
 
 // Project

@@ -27,6 +27,12 @@ export function EdgeEditor({ onClose }: EdgeEditorProps) {
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0, startPosX: 0, startPosY: 0 });
 
+  // Combo search state
+  const [originSearch, setOriginSearch] = useState("");
+  const [destSearch, setDestSearch] = useState("");
+  const [showOriginList, setShowOriginList] = useState(false);
+  const [showDestList, setShowDestList] = useState(false);
+
   const [originId, setOriginId] = useState("");
   const [destId, setDestId] = useState("");
   const [mode, setMode] = useState<TransportMode>("driving");
@@ -169,14 +175,12 @@ export function EdgeEditor({ onClose }: EdgeEditorProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/30 z-50" onClick={onClose}>
-      <div
-        className="bg-surface rounded-lg shadow-xl w-[520px] max-h-[85vh] overflow-y-auto absolute"
+    <div
+        className="bg-surface rounded-lg shadow-2xl w-[520px] max-h-[85vh] overflow-y-auto fixed z-50"
         style={{ left: `calc(50% + ${pos.x}px)`, top: `calc(50% + ${pos.y}px)`, transform: "translate(-50%, -50%)" }}
-        onClick={(e) => e.stopPropagation()}
       >
         <div
-          className="p-4 border-b border-border font-medium text-sm cursor-move select-none bg-gray-50 rounded-t-lg"
+          className="p-4 border-b border-border font-medium text-sm cursor-move select-none bg-gray-50 rounded-t-lg flex items-center justify-between"
           onMouseDown={(e) => {
             dragRef.current = {
               dragging: true,
@@ -206,36 +210,51 @@ export function EdgeEditor({ onClose }: EdgeEditorProps) {
           }}
         >
           添加路线边
+          <button className="text-text-muted hover:text-text text-base leading-none cursor-default" onClick={onClose}>✕</button>
         </div>
 
         <div className="p-4 space-y-3">
           {/* Origin and destination */}
           <div className="flex gap-2">
-            <div className="flex-1">
+            <div className="flex-1 relative">
               <label className="block text-xs text-text-muted mb-1">起点</label>
-              <select
+              <input
                 className="w-full px-3 py-1.5 text-sm border border-border rounded"
-                value={originId}
-                onChange={(e) => setOriginId(e.target.value)}
-              >
-                <option value="">选择起点</option>
-                {pois.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
+                placeholder="搜索或选择..."
+                value={originId ? pois.find(p=>p.id===originId)?.name || originSearch : originSearch}
+                onChange={(e) => { setOriginSearch(e.target.value); setShowOriginList(true); if (originId) setOriginId(""); }}
+                onFocus={() => setShowOriginList(true)}
+                onBlur={() => setTimeout(() => setShowOriginList(false), 200)}
+              />
+              {showOriginList && (
+                <div className="absolute top-full left-0 right-0 z-50 mt-0.5 max-h-36 overflow-y-auto bg-white border border-border rounded shadow-lg">
+                  {pois.filter(p => !originSearch || p.name.toLowerCase().includes(originSearch.toLowerCase())).map(p => (
+                    <div key={p.id} className="px-3 py-1.5 text-xs hover:bg-gray-50 cursor-pointer" onMouseDown={() => { setOriginId(p.id); setOriginSearch(p.name); setShowOriginList(false); }}>
+                      {p.tag==="hotel"?"🏨 ":p.tag==="restaurant"?"🍽 ":"📍 "}{p.name}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            <div className="flex-1">
+            <div className="flex-1 relative">
               <label className="block text-xs text-text-muted mb-1">终点</label>
-              <select
+              <input
                 className="w-full px-3 py-1.5 text-sm border border-border rounded"
-                value={destId}
-                onChange={(e) => setDestId(e.target.value)}
-              >
-                <option value="">选择终点</option>
-                {pois.filter((p) => p.id !== originId).map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
+                placeholder="搜索或选择..."
+                value={destId ? pois.find(p=>p.id===destId)?.name || destSearch : destSearch}
+                onChange={(e) => { setDestSearch(e.target.value); setShowDestList(true); if (destId) setDestId(""); }}
+                onFocus={() => setShowDestList(true)}
+                onBlur={() => setTimeout(() => setShowDestList(false), 200)}
+              />
+              {showDestList && (
+                <div className="absolute top-full left-0 right-0 z-50 mt-0.5 max-h-36 overflow-y-auto bg-white border border-border rounded shadow-lg">
+                  {pois.filter(p => p.id !== originId && (!destSearch || p.name.toLowerCase().includes(destSearch.toLowerCase()))).map(p => (
+                    <div key={p.id} className="px-3 py-1.5 text-xs hover:bg-gray-50 cursor-pointer" onMouseDown={() => { setDestId(p.id); setDestSearch(p.name); setShowDestList(false); }}>
+                      {p.tag==="hotel"?"🏨 ":p.tag==="restaurant"?"🍽 ":"📍 "}{p.name}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -358,7 +377,6 @@ export function EdgeEditor({ onClose }: EdgeEditorProps) {
             {saving ? "保存中..." : `保存边${!useCustom && routes.length > 0 ? ` (${STRATEGY_NAMES[routes[selectedIndex]?.strategy || "0"]})` : ""}`}
           </button>
         </div>
-      </div>
     </div>
   );
 }

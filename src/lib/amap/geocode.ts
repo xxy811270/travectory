@@ -23,13 +23,14 @@ export async function geocode(
 
 export async function reGeocode(
   lng: number,
-  lat: number
+  lat: number,
+  radius: number = 300
 ): Promise<{ address: string; nearbyPois: Array<{ id: string; name: string; address: string }> }> {
   const location = `${lng},${lat}`;
   const data = await amapGet<AmapReGeocodeResponse>("/v3/geocode/regeo", {
     location,
     extensions: "all",
-    radius: 300,
+    radius,
   });
 
   if (data.status !== "1") {

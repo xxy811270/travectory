@@ -7,8 +7,8 @@ import { formatDistance } from "@/lib/geo";
 import { getDayColor } from "@/stores/map-store";
 import { POIEditor } from "@/components/left-panel/POIEditor";
 
-const AMAP_KEY = "845e62b164ef5f9f6cf9b26a98f3cd4a";
-const AMAP_SECRET = "fcbdbb9b1e5d1409235e80f665996ba4";
+const AMAP_KEY = process.env.NEXT_PUBLIC_AMAP_JS_KEY || "";
+const AMAP_SECRET = process.env.NEXT_PUBLIC_AMAP_SECRET || "";
 const PLUGINS = "AMap.Marker,AMap.Polyline,AMap.PolyEditor,AMap.Geocoder,AMap.AutoComplete,AMap.PlaceSearch,AMap.Driving,AMap.Walking,AMap.Riding,AMap.InfoWindow,AMap.Pixel,AMap.Bounds";
 
 let globalMap: unknown = null;
@@ -26,7 +26,12 @@ export function MapContainer() {
   const [clickedPos, setClickedPos] = useState<{ lng: number; lat: number } | null>(null);
   const [featureConfirm, setFeatureConfirm] = useState<{ pois: Array<{ id: string; name: string; address: string }>; lng: number; lat: number; address: string } | null>(null);
   const [satellite, setSatellite] = useState(false);
+  const [showPois, setShowPois] = useState(true);
+  const showPoisRef = useRef(true);
   const satelliteLayersRef = useRef<unknown[]>([]);
+
+  // Keep ref in sync
+  showPoisRef.current = showPois;
 
   // Effect 1: Load Amap script and create map (one-time)
   useEffect(() => {
@@ -158,21 +163,36 @@ export function MapContainer() {
 
           const stored = localStorage.getItem("travectory_user");
           const uid = stored ? JSON.parse(stored).id || "default" : "default";
+          const pstored = localStorage.getItem("travectory_project");
+          const pid = pstored ? JSON.parse(pstored).id || uid : uid;
 
           try {
+            // Get map zoom level to adjust search radius
+            const mapZoom = (map as { getZoom?: () => number }).getZoom?.() || 10;
+            const radius = mapZoom >= 14 ? 200 : mapZoom >= 12 ? 500 : mapZoom >= 10 ? 1000 : 2000;
+
             const res = await fetch("/api/poi/geocode", {
               method: "POST",
-              headers: { "Content-Type": "application/json", "x-user-id": uid },
-              body: JSON.stringify({ lng, lat }),
+              headers: { "Content-Type": "application/json", "x-user-id": uid, "x-project-id": pid },
+              body: JSON.stringify({ lng, lat, radius }),
             });
             const data = await res.json();
-            const nearbyPois: Array<{ id: string; name: string; address: string }> = data?.nearbyPois || [];
+            let nearbyPois: Array<{ id: string; name: string; address: string }> = data?.nearbyPois || [];
 
-            // If there are nearby POIs, show quick-add picker
+            // Retry with larger radius if no results
+            if (nearbyPois.length === 0 && radius < 2000) {
+              const res2 = await fetch("/api/poi/geocode", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "x-user-id": uid, "x-project-id": pid },
+                body: JSON.stringify({ lng, lat, radius: 2000 }),
+              });
+              const data2 = await res2.json();
+              nearbyPois = data2?.nearbyPois || [];
+            }
+
             if (nearbyPois.length > 0) {
               setFeatureConfirm({ pois: nearbyPois, lng, lat, address: data?.address || "" });
             } else {
-              // No nearby POI found — open full editor
               setClickedPos({ lng, lat });
             }
           } catch {
@@ -234,6 +254,7 @@ export function MapContainer() {
     const selectedPoiId = usePoiStore.getState().selectedPoiId;
 
     storePois.forEach((poi) => {
+      if (!showPoisRef.current) return;
       const isHotel = poi.tag === "hotel";
       const color = POI_TAG_COLORS[poi.tag];
       const sel = poi.id === selectedPoiId;
@@ -362,8 +383,8 @@ export function MapContainer() {
               const pp = route?.polyline || edge.customRoute?.polyline;
               if (pp?.length) {
                 const pl = new AMap.Polyline({
-                  path: pp, strokeColor: color, strokeWeight: 5,
-                  strokeOpacity: 0.6, zIndex: 55,
+                  path: pp, strokeColor: color, strokeWeight: 7,
+                  strokeOpacity: 0.75, zIndex: 55,
                 });
                 (pl as { setMap?: (m: unknown) => void }).setMap?.(map);
                 overlayObjsRef.current.push(pl);
@@ -413,6 +434,13 @@ export function MapContainer() {
             title="全国视图"
           >
             🏠
+          </button>
+          <button
+            className={`w-8 h-8 rounded shadow flex items-center justify-center text-xs ${showPois ? "bg-white hover:bg-gray-50" : "bg-gray-300 text-text-muted"}`}
+            onClick={() => setShowPois(!showPois)}
+            title={showPois ? "隐藏 POI" : "显示 POI"}
+          >
+            📍
           </button>
           <button
             className={`w-8 h-8 rounded shadow flex items-center justify-center text-xs ${satellite ? "bg-blue-500 text-white" : "bg-white hover:bg-gray-50"}`}
@@ -467,9 +495,11 @@ export function MapContainer() {
                   try {
                     const stored = localStorage.getItem("travectory_user");
                     const uid = stored ? JSON.parse(stored).id || "default" : "default";
+                    const pstored = localStorage.getItem("travectory_project");
+                    const pid = pstored ? JSON.parse(pstored).id || uid : uid;
                     const res = await fetch("/api/poi", {
                       method: "POST",
-                      headers: { "Content-Type": "application/json", "x-user-id": uid },
+                      headers: { "Content-Type": "application/json", "x-user-id": uid, "x-project-id": pid },
                       body: JSON.stringify({
                         name: poi.name,
                         lng: featureConfirm.lng,

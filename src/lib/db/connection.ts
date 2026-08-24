@@ -1,16 +1,16 @@
 import Database from "better-sqlite3";
 import path from "path";
 import { SCHEMA_SQL } from "./schema";
-import { getCurrentUserId } from "./context";
+import { getCurrentProjectId } from "./context";
 
 const dbs = new Map<string, Database.Database>();
 
-export function getDb(userId?: string): Database.Database {
-  const uid = userId || getCurrentUserId();
-  const existing = dbs.get(uid);
+export function getDb(projectId?: string): Database.Database {
+  const pid = projectId || getCurrentProjectId();
+  const existing = dbs.get(pid);
   if (existing) return existing;
 
-  const dbPath = path.join(process.cwd(), "data", `travectory_${uid}.db`);
+  const dbPath = path.join(process.cwd(), "data", `travectory_p_${pid}.db`);
 
   const fs = require("fs");
   const dataDir = path.join(process.cwd(), "data");
@@ -26,7 +26,7 @@ export function getDb(userId?: string): Database.Database {
     db.prepare("INSERT INTO project_meta (id) VALUES ('default')").run();
   }
 
-  dbs.set(uid, db);
+  dbs.set(pid, db);
   return db;
 }
 

@@ -12,7 +12,7 @@ interface AmapLoaderState {
 let globalAMap: typeof window.AMap | null = null;
 let loadPromise: Promise<typeof window.AMap> | null = null;
 
-const AMAP_KEY = "845e62b164ef5f9f6cf9b26a98f3cd4a";
+const AMAP_KEY = process.env.NEXT_PUBLIC_AMAP_JS_KEY || "";
 const AMAP_VERSION = "2.0";
 const AMAP_PLUGINS = [
   "AMap.Marker",
@@ -47,7 +47,7 @@ function loadAmapScript(): Promise<typeof window.AMap> {
 
     // MUST set security config before loading Amap script
     window._AMapSecurityConfig = {
-      securityJsCode: "fcbdbb9b1e5d1409235e80f665996ba4",
+      securityJsCode: process.env.NEXT_PUBLIC_AMAP_SECRET || "",
     };
 
     // Build URL with plugin parameter (singular for v2.0)

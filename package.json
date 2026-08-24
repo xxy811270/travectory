@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "package": "scripts\\package.bat"
   },
   "dependencies": {
     "@amap/amap-jsapi-loader": "^1.0.1",
@@ -17,6 +18,7 @@
     "next": "^16.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "sharp": "^0.34.5",
     "sonner": "^2.0.0",
     "tailwind-merge": "^3.0.0",
     "uuid": "^11.0.0",

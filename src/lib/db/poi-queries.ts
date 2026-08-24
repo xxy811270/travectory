@@ -36,8 +36,11 @@ export function insertPoi(poi: POI): void {
     `INSERT INTO pois (id, name, lng, lat, address, tag, amap_poi_id, phone, notes, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
-    poi.id, poi.name, poi.lng, poi.lat, poi.address, poi.tag,
-    poi.amapPoiId || null, poi.phone, poi.notes, poi.createdAt, poi.updatedAt
+    String(poi.id), String(poi.name), Number(poi.lng) || 0, Number(poi.lat) || 0,
+    String(poi.address || ""), String(poi.tag || "normal"),
+    poi.amapPoiId ? String(poi.amapPoiId) : null,
+    String(poi.phone || ""), String(poi.notes || ""),
+    String(poi.createdAt), String(poi.updatedAt)
   );
 }
 
