@@ -17,7 +17,7 @@ public class StaticMapPlugin extends Plugin {
     public void fetch(PluginCall call) {
         String value = call.getString("url");
         if (value == null) { call.reject("缺少静态地图地址"); return; }
-        getBridge().executeOnThreadPool(() -> {
+        new Thread(() -> {
             HttpURLConnection connection = null;
             try {
                 URL url = new URL(value);
@@ -41,6 +41,6 @@ public class StaticMapPlugin extends Plugin {
             } finally {
                 if (connection != null) connection.disconnect();
             }
-        });
+        }, "travectory-static-map").start();
     }
 }
