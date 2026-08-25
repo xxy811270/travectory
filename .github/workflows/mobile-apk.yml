@@ -1,4 +1,5 @@
 name: Build Travectory Android APK
+# Signed mobile release: 1.1.1
 
 on:
   workflow_dispatch:
