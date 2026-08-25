@@ -18,6 +18,7 @@ function readDesktopEnv(name: string): string {
 
 const amapJsKey = process.env.NEXT_PUBLIC_AMAP_JS_KEY || readDesktopEnv("NEXT_PUBLIC_AMAP_JS_KEY");
 const amapSecret = process.env.NEXT_PUBLIC_AMAP_SECRET || readDesktopEnv("NEXT_PUBLIC_AMAP_SECRET");
+const amapWebKey = process.env.NEXT_PUBLIC_AMAP_WEB_KEY || readDesktopEnv("AMAP_WEB_KEY");
 const pagesRepository = process.env.GITHUB_PAGES === "true" ? (process.env.GITHUB_REPOSITORY || "").split("/")[1] : "";
 const basePath = pagesRepository ? `/${pagesRepository}` : "";
 
@@ -31,6 +32,7 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_AMAP_JS_KEY: amapJsKey,
     NEXT_PUBLIC_AMAP_SECRET: amapSecret,
+    NEXT_PUBLIC_AMAP_WEB_KEY: amapWebKey,
     NEXT_PUBLIC_BASE_PATH: basePath,
   },
 };

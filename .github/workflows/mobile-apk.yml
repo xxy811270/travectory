@@ -12,6 +12,8 @@ permissions:
 jobs:
   apk:
     runs-on: ubuntu-latest
+    env:
+      SIGNING_KEY_BASE64: ${{ secrets.ANDROID_SIGNING_KEY_BASE64 }}
     defaults:
       run:
         working-directory: mobile
@@ -32,13 +34,35 @@ jobs:
         env:
           NEXT_PUBLIC_AMAP_JS_KEY: ${{ secrets.NEXT_PUBLIC_AMAP_JS_KEY }}
           NEXT_PUBLIC_AMAP_SECRET: ${{ secrets.NEXT_PUBLIC_AMAP_SECRET }}
+          NEXT_PUBLIC_AMAP_WEB_KEY: ${{ secrets.AMAP_WEB_KEY }}
       - run: npx cap sync android
       - run: chmod +x android/gradlew
-      - run: ./gradlew assembleDebug
+      - name: Restore Android signing key
+        if: env.SIGNING_KEY_BASE64 != ''
+        run: echo "$SIGNING_KEY_BASE64" | base64 --decode > android/app/travectory-release.jks
+      - run: ./gradlew assembleRelease
+        if: env.SIGNING_KEY_BASE64 != ''
+        working-directory: mobile/android
+        env:
+          ANDROID_KEYSTORE_PATH: travectory-release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - name: Compile unsigned test APK when signing is not configured
+        if: env.SIGNING_KEY_BASE64 == ''
+        run: ./gradlew assembleDebug
         working-directory: mobile/android
       - uses: actions/upload-artifact@v4
+        if: env.SIGNING_KEY_BASE64 != ''
         with:
-          name: travectory-android-debug-apk
-          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          name: travectory-android-v1.1.1
+          path: mobile/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: env.SIGNING_KEY_BASE64 == ''
+        with:
+          name: travectory-v1.1.1-signing-not-configured
+          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
