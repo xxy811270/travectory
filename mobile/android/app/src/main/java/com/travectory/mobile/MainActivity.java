@@ -13,6 +13,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(RoadbookImportPlugin.class);
+        registerPlugin(ImageExportPlugin.class);
         super.onCreate(savedInstanceState);
         captureRoadbook(getIntent());
     }

@@ -1,21 +1,26 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Download, FileJson, FileText, Image, Import, Pencil, Share2, Smartphone, Upload } from "lucide-react";
+import { Download, FileJson, FileText, Image, Import, Pencil, Save, Share2, Smartphone, Upload, X } from "lucide-react";
 import { mobileProjectApi, localProjectFiles } from "../lib/local-api";
 import { parseRoadbookFile, summarizeRoadbook } from "../lib/roadbook-format";
 import { buildGpx, buildRoadbookHtml, buildRoadbookPng } from "../lib/client-export";
+import { canSaveToNativeGallery, savePngToGallery } from "../lib/native-image-export";
 import type { Day, Edge, Poi, ProjectListItem } from "../types";
 
 interface InstallEvent extends Event { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }>; }
 
 export function MobileTools({ project, days, pois, edges, onChanged, onRenamed }: { project: ProjectListItem; days: Day[]; pois: Poi[]; edges: Edge[]; onChanged: () => Promise<void>; onRenamed: (name: string) => void }) {
-  const [name,setName]=useState(project.name); const [working,setWorking]=useState(""); const [message,setMessage]=useState(""); const [shareUrl,setShareUrl]=useState(""); const [installEvent,setInstallEvent]=useState<InstallEvent|null>(null); const [canUndo,setCanUndo]=useState(false); const importRef=useRef<HTMLInputElement>(null); const gpxRef=useRef<HTMLInputElement>(null);
+  const [name,setName]=useState(project.name); const [working,setWorking]=useState(""); const [message,setMessage]=useState(""); const [shareUrl,setShareUrl]=useState(""); const [installEvent,setInstallEvent]=useState<InstallEvent|null>(null); const [canUndo,setCanUndo]=useState(false); const [pngPreview,setPngPreview]=useState<{blob:Blob;url:string;filename:string}|null>(null); const importRef=useRef<HTMLInputElement>(null); const gpxRef=useRef<HTMLInputElement>(null);
   useEffect(()=>{void localProjectFiles.canUndo(project.id).then(setCanUndo);const handler=(event:Event)=>{event.preventDefault();setInstallEvent(event as InstallEvent);};window.addEventListener("beforeinstallprompt",handler);return()=>window.removeEventListener("beforeinstallprompt",handler);},[project.id]);
   const run=async(label:string,action:()=>Promise<void>)=>{setWorking(label);setMessage("");try{await action();setMessage(`${label}完成`);}catch(reason){setMessage(reason instanceof Error?reason.message:`${label}失败`);}finally{setWorking("");}};
   const rename=()=>run("名称保存",async()=>{const value=name.trim();if(!value)throw new Error("名称不能为空");await mobileProjectApi.rename(project.userId,project.id,value);onRenamed(value);});
   const downloadJson=async()=>{const data=await localProjectFiles.export(project.id);downloadBlob(new Blob([JSON.stringify(data,null,2)],{type:"application/json;charset=utf-8"}),`${project.name}.roadbook.json`);};
   const download=async(path:string,filename:string,_method="GET",data?:unknown)=>{if(path==="/api/export/json")return downloadJson();if(path==="/api/export/html")return downloadBlob(new Blob([buildRoadbookHtml(project.name,project.description,days,pois,edges)],{type:"text/html;charset=utf-8"}),filename);if(path==="/api/export/image")return downloadBlob(await buildRoadbookPng(project.name,days,pois,edges),filename);if(path==="/api/export/gpx"){const day=days.find(item=>item.id===(data as {dayId?:string})?.dayId);if(!day)throw new Error("没有可导出的日程");return downloadBlob(new Blob([buildGpx(day,pois,edges)],{type:"application/gpx+xml;charset=utf-8"}),filename);}throw new Error("不支持的导出格式");};
+  const exportPng=()=>run("PNG长图导出",async()=>{const blob=await buildRoadbookPng(project.name,days,pois,edges);const filename=`${project.name}_${stamp()}.png`;setPngPreview(current=>{if(current)URL.revokeObjectURL(current.url);return {blob,url:URL.createObjectURL(blob),filename};});});
+  const closePngPreview=()=>setPngPreview(current=>{if(current)URL.revokeObjectURL(current.url);return null;});
+  const savePng=()=>run("保存到相册",async()=>{if(!pngPreview)return;if(canSaveToNativeGallery()){const result=await savePngToGallery(pngPreview.blob,pngPreview.filename);setMessage(`已保存到相册 · ${result.album}`);}else{downloadBlob(pngPreview.blob,pngPreview.filename);setMessage("图片已下载，可在浏览器下载记录中查看");}});
+  const sharePng=()=>run("分享长图",async()=>{if(!pngPreview)return;const file=new File([pngPreview.blob],pngPreview.filename,{type:"image/png"});if(navigator.canShare?.({files:[file]}))await navigator.share({title:project.name,text:"Travectory 路书长图",files:[file]});else downloadBlob(file,file.name);});
   const stamp=()=>{const now=new Date();return `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,"0")}${String(now.getDate()).padStart(2,"0")}`;};
   const importFile=async(file:File,type:"roadbook"|"gpx")=>run(type==="roadbook"?"路书覆盖":"轨迹导入",async()=>{if(type==="gpx")throw new Error("GPX 本地导入将在静态导出阶段接入");const data=parseRoadbookFile(JSON.parse(await file.text()));const summary=summarizeRoadbook(data);if(!confirm(`将用“${summary.name}”覆盖当前路书。\n${summary.dayCount} 天 · ${summary.poiCount} 个 POI · ${summary.edgeCount} 条路线\n\n覆盖前会自动创建恢复快照，是否继续？`))return;await localProjectFiles.replace(project.id,data,`覆盖自 ${file.name}`);setCanUndo(true);onRenamed(summary.name);await onChanged();});
   const undoImport=()=>run("撤回覆盖",async()=>{if(!confirm("恢复覆盖前的路书版本？当前覆盖后的内容将被替换。"))return;const restored=await localProjectFiles.undo(project.id);setCanUndo(await localProjectFiles.canUndo(project.id));onRenamed(restored.name);setName(restored.name);await onChanged();});
@@ -25,7 +30,7 @@ export function MobileTools({ project, days, pois, edges, onChanged, onRenamed }
     <div className="tool-card rename-tool"><span><Pencil size={18}/></span><div><b>路书名称</b><input value={name} onChange={(event)=>setName(event.target.value)}/></div><button onClick={()=>void rename()} disabled={!!working}>保存</button></div>
     <h3>导出</h3>
     <div className="tool-grid">
-      <button onClick={()=>void run("PNG长图导出",()=>download("/api/export/image",`${project.name}_${stamp()}.png`))}><Image size={22}/><b>PNG 长图</b><small>离线路线总览长图</small></button>
+      <button onClick={()=>void exportPng()}><Image size={22}/><b>PNG 长图</b><small>生成后预览、保存或分享</small></button>
       <button onClick={()=>void run("HTML导出",()=>download("/api/export/html",`${project.name}_${stamp()}.html`))}><FileText size={22}/><b>HTML 路书</b><small>完整离线页面</small></button>
       <button onClick={()=>void run("JSON导出",downloadJson)}><FileJson size={22}/><b>JSON 备份</b><small>桌面端可重新导入</small></button>
       <button onClick={()=>{const day=days[0];if(day)void run("GPX导出",()=>download("/api/export/gpx",`day-${day.dayNumber}.gpx`,"POST",{dayId:day.id}));}}><Download size={22}/><b>GPX</b><small>导出第一天轨迹</small></button>
@@ -40,6 +45,13 @@ export function MobileTools({ project, days, pois, edges, onChanged, onRenamed }
     <input ref={importRef} hidden type="file" accept=".json,.roadbook.json" onChange={(event)=>event.target.files?.[0]&&void importFile(event.target.files[0],"roadbook")}/>
     <input ref={gpxRef} hidden type="file" accept=".gpx,.kml" onChange={(event)=>event.target.files?.[0]&&void importFile(event.target.files[0],"gpx")}/>
     {(working||message)&&<div className={`tools-message ${working?"working":""}`}>{working?`${working}中...`:message}</div>}
+    {pngPreview&&<div className="png-preview-backdrop" role="dialog" aria-modal="true" aria-label="长图预览">
+      <div className="png-preview-sheet">
+        <div className="png-preview-title"><div><b>长图已生成</b><small>{pngPreview.filename}</small></div><button onClick={closePngPreview} aria-label="关闭预览"><X size={20}/></button></div>
+        <div className="png-preview-image"><img src={pngPreview.url} alt={`${project.name}路书长图预览`}/></div>
+        <div className="png-preview-actions"><button className="secondary" onClick={()=>void sharePng()} disabled={!!working}><Share2 size={17}/>分享</button><button className="primary" onClick={()=>void savePng()} disabled={!!working}><Save size={17}/>{canSaveToNativeGallery()?"保存到相册":"保存图片"}</button></div>
+      </div>
+    </div>}
   </section>;
 }
 
