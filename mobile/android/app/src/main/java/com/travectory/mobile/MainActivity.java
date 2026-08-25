@@ -14,6 +14,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(RoadbookImportPlugin.class);
         registerPlugin(ImageExportPlugin.class);
+        registerPlugin(StaticMapPlugin.class);
         super.onCreate(savedInstanceState);
         captureRoadbook(getIntent());
     }

@@ -284,7 +284,7 @@ function MoreScreen({ days, pois }: { days: number; pois: number }) {
         <button><span className="menu-icon"><Download size={20} /></span><div><b>导出与分享</b><small>PNG 长图、HTML、GPX</small></div><ChevronRight size={19} /></button>
         <button><span className="menu-icon"><Navigation size={20} /></span><div><b>定位与导航</b><small>将在地图阶段启用</small></div><ChevronRight size={19} /></button>
       </div>
-      <div className="version-note">Travectory Mobile · v1.1.1</div>
+      <div className="version-note">Travectory Mobile · v1.1.2</div>
     </section>
   );
 }

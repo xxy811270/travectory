@@ -1,5 +1,5 @@
 name: Build Travectory Android APK
-# Signed mobile release: 1.1.1
+# Signed mobile release: 1.1.2
 
 on:
   workflow_dispatch:
@@ -56,14 +56,14 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: env.SIGNING_KEY_BASE64 != ''
         with:
-          name: travectory-android-v1.1.1
+          name: travectory-android-v1.1.2
           path: mobile/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         if: env.SIGNING_KEY_BASE64 == ''
         with:
-          name: travectory-v1.1.1-signing-not-configured
+          name: travectory-v1.1.2-signing-not-configured
           path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 7
